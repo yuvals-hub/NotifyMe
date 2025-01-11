@@ -1,0 +1,262 @@
+<!doctype html>
+<html lang="en">
+{% load pwa %}
+{% load embed_video_tags %}
+
+<head>
+    {% progressive_web_app_meta %}
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description"
+        content="A layout example with a side menu that hides on mobile, just like the Pure website.">
+    <title>NotifyMe &ndash; Traffic Feeds</title>
+    {% load static %}
+    <link rel="stylesheet" href="{% static 'css/styles.css' %}">
+
+    <style>
+        .poi-camera-row {
+            display: flex;
+            flex-wrap: wrap;
+            justify-content: space-between;
+            margin-bottom: 20px;
+        }
+        .poi-camera {
+            flex-basis: calc(50% - 10px);
+            margin-bottom: 20px;
+            margin-right: 10px;
+            text-align: center;
+        }
+        .hidden{
+            display:none;
+        }
+    </style>
+
+</head>
+
+
+<body>
+
+    <div id="layout">
+        <!-- Menu toggle -->
+        <a href="#menu" id="menuLink" class="menu-link">
+            <!-- Hamburger icon -->
+            <span></span>
+        </a>
+
+        <div id="menu">
+            <div class="pure-menu">
+                <a class="pure-menu-heading" href="https://www.ecb.torontomu.ca/capstone/topics/2022/AA03.html">AA03</a>
+
+                <ul class="pure-menu-list">
+                    <li class="pure-menu-item menu-item-divided pure-menu-selected">
+                        <a href="" class="pure-menu-link">Traffic Feeds</a>
+                    </li>
+                    <li class="pure-menu-item"><a href="airport" class="pure-menu-link">Airport Data</a></li>
+                    <li class="pure-menu-item"><a href="weather" class="pure-menu-link">Weather Data</a></li>
+                    <li class="pure-menu-item"><a href="./" class="pure-menu-link">NotifyMe</a></li>
+                    <li class="pure-menu-item"><a href="" class="pure-menu-link">Results</a></li>
+                    <li class="pure-menu-item"><a href="credits" class="pure-menu-link">Credits</a></li>
+                </ul>
+            </div>
+        </div>
+
+        <div id="main">
+        
+            <div class="header">
+                <h1>Traffic Feeds</h1>
+                <h2>Live video feeds of various roads and highways</h2>
+                <div class="dropdown">
+                    <select id="dropdown">
+                        <option value="content" selected>Traffic Feeds</option>
+                        <option value="poi-feeds">POI Feeds</option>
+                    </select>
+                </div>
+            </div>
+
+            <div class="content" id="content">
+
+                <h1>Traffic Feed</h1>
+                {% if show_traffic_feed %}
+                <div id="map" style="height: 800px;"></div>
+                {% endif %}
+
+                <div id="api-data">
+                    {% for attraction in data.data %}
+                        <h2>{{ attraction.name }}</h2>
+                        <p>{{ attraction.description }}</p>
+                    {% endfor %}
+                </div>
+            </div>
+
+            <div class="poi-feeds hidden", id="poi-feeds">
+
+                <h1>Popular POI Live Feeds</h1>
+                <div class = "poi-feeds-row">
+                    {% for i in youtube_set %}
+                        <div class="poi-feeds" data-country = "{{ i.country }}">
+                            <h2>{{i.title}}</h2>
+                                {%  video i.video 'tiny' %}
+                        </div>
+                        {% if forloop.counter|divisibleby:2 %}
+                            </div><div class="poi-feeds-row">
+                </div><div class = "poi-feeds-row">
+                    {% endif %} 
+                {% endfor %}
+            </div>
+        </div>
+    </div>
+
+    <script src="https://maps.googleapis.com/maps/api/js?key={{ api_key }}"></script>
+
+    <script>
+        let currentMarker = null;
+
+        function initMap() {
+            const map = new google.maps.Map(document.getElementById('map'), {
+                center: { lat: 43.7626, lng: -79.3832 },
+                zoom: 10
+            });
+
+            const infowindow = new google.maps.InfoWindow();
+
+            var youtube = JSON.parse('{{ youtube_set_json|escapejs }}')
+            for (var i = 0; i < youtube.length; i++){
+                const point = youtube[i]
+                const marker = new google.maps.Marker({
+                    position: { lat: point.latitude, lng: point.longitude },
+                    map: map,
+                    title: point.title,
+                });
+
+            marker.addListener('click', () => {
+
+                const videoId = point.video.split('v=')[1];
+                const embedUrl = `https://www.youtube.com/embed/${videoId}`;
+                const content = document.createElement('div');
+                const iframe = document.createElement('iframe');
+
+                //video.src = point.video;
+                iframe.setAttribute('allowfullscreen', '');
+                iframe.setAttribute('frameborder', '0');
+                iframe.setAttribute('allow', 'encrypted-media; picture-in-picture');
+                iframe.setAttribute('src', embedUrl);
+                iframe.style.width = '100%';
+                iframe.style.height = '360px';
+                content.appendChild(iframe);
+
+                infowindow.setContent(content);
+                infowindow.open(map, marker);
+                });
+            }
+
+            var cams = JSON.parse('{{ cam_set|escapejs }}')
+            for (var i = 0; i < cams.length; i++) {
+                const point = cams[i];
+                const marker = new google.maps.Marker({
+                    position: { lat: point.latitude, lng: point.longitude },
+                    map: map,
+                    title: point.cam_url
+                });
+
+                marker.addListener('click', function () {
+                    const content = document.createElement('div');
+                    const image = document.createElement('img');
+                    image.src = point.cam_url;
+                    image.width = '380';
+                    image.height = '300';
+                    content.appendChild(image);
+
+                    infowindow.setContent(content);
+                    infowindow.open(map, marker);
+                });
+            }
+
+            map.addListener('click', function (event) {
+                const marker = new google.maps.Marker({
+                    position: event.latLng,
+                    map: map
+                });
+
+                marker.addListener('click', function () {
+                    const content = document.createElement('div');
+                    const image = document.createElement('img');
+                    image.src = cams[4].cam_url;
+                    image.width = '380';
+                    image.height = '300';
+                    content.appendChild(image);
+                    infowindow.setContent(content);
+                    infowindow.open(map, marker);
+                });
+            });
+
+            map.addListener('click', function(event){
+                const lat = event.latLng.lat();
+                const lng = event.latLng.lng();
+
+                $.ajax({
+                    url: '/travel-advisor',
+                    method: 'GET',
+                    data: {
+                        lat: lat,
+                        lng: lng
+                    },     
+                success: function(response){
+                      // Update the HTML of the 'api-data' div with the response data
+                    $('#api-data').html('');
+                    for (var i = 0; i < response.data.length; i++) {
+                        var attraction = response.data[i];
+                        $('#api-data').append('<h2>' + attraction.name + '</h2>');
+                        $('#api-data').append('<p>' + attraction.description + '</p>');
+                    }
+                }, 
+                error: function(error){
+                    console.log(error);
+                }                       
+            });
+        });
+            
+        }
+
+        const dropdown = document.getElementById('dropdown');
+        const content = document.querySelector('.content');
+        const poiFeeds = document.getElementById('poi-feeds');
+
+        content.style.display = 'block';
+        poiFeeds.style.display = 'none';
+
+        dropdown.addEventListener('change', () => {
+            if (dropdown.value == 'content'){
+                content.style.display = 'block';
+                poiFeeds.style.display = 'none';
+                countryDropdown.style.display = 'none';
+            } else if (dropdown.value == 'poi-feeds'){
+                content.style.display = 'none';
+                poiFeeds.style.display = 'block';
+            }
+        });
+
+    </script>
+    <script async defer src="https://maps.googleapis.com/maps/api/js?key={{ api_key }}&callback=initMap"></script>
+    <script src="{% static 'js/ui.js' %}"></script>
+
+    <script>
+        const poiCameras = document.querySelector('#poi-cameras');
+        const selectedCameraImg = document.querySelector('#selected-camera-img');
+        const selectedCameraHeader = document.querySelector('#selected-camera h2');
+
+        poiCameras.addEventListener('change', (event) => {
+            const selectedCamera = event.target.value;
+            if (selectedCamera) {
+                const camera = JSON.parse('{{ poi_set|escapejs }}').find((poi) => poi.id == selectedCamera);
+                selectedCameraImg.src = camera.image.url;
+                selectedCameraImg.alt = camera.cam_name;
+                selectedCameraHeader.innerHTML = camera.cam_name;
+                document.querySelector('#selected-camera').classList.add('selected');
+            } else {
+                document.querySelector('#selected-camera').classList.remove('selected');
+            }
+        }); 
+    </script>
+</body>
+
+</html>

@@ -1,0 +1,48 @@
+{% extends "main/base.html" %}
+{% load static %}
+{% block content %}
+
+    <div id="main">
+        <div class="header">
+            <h1>Results</h1>
+            <h2>Maps, Travel Time and Distance Matrices</h2>
+        </div>
+        <div class="content">
+            <h2 class="content-subhead">Requested Trip Information</h2>
+            <p>
+                <b>{{s_add}}</b> TO <b>{{d_add}}</b><br>
+                Trip Distance: <b>{{distance}}</b><br>
+                Base Estimated Duration: <b>{{duration}}</b>
+            </p>
+			<h2 class="content-subhead">Current Weather Conditions</h2>
+            <p>
+                Description: <b>{{locationWeather}}</b><br>
+                Temperature: <b>{{locationTemp}} °C</b><br>
+                Wind Speed: <b>{{locationWind}} km/h</b><br>
+                Visibility: <b>{{locationVis}} km</b><br>
+                Travel Time Multiplier: <b>{{weatherWeight}}x</b><br>
+                Updated Travel Time: <b>{{modifiedDuration}} mins</b><br>
+            </p>
+			<h2 class="content-subhead">Route on Map</h2>
+            <p>
+				<iframe
+					width="800"
+					height="400"
+					frameborder="0" style="border:0"
+					referrerpolicy="no-referrer-when-downgrade"
+					src="https://www.google.com/maps/embed/v1/directions?key={{api_key}}&origin={{s_add}}&destination={{d_add}}&mode={{mode}}"
+					allowfullscreen>
+				</iframe>
+            </p>
+            {% if termWaitTimes != 0 %}
+			<h2 class="content-subhead">Airport Terminal Wait Times</h2>
+            <p>
+                {% for terminal, waitTime in termWaitTimes %}
+                    {{terminal}}: <b>{{waitTime}}</b><br>
+                {% endfor %}
+            </p>
+            {% endif %}
+        </div>
+
+<script src="{% static 'js/ui.js' %}"></script>
+{% endblock %}

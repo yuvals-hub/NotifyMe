@@ -1,0 +1,683 @@
+{% extends "main/base.html" %}
+{% load static %}
+{% block content %}
+<div id="main">
+  <div class="header">
+    <h1>NotifyMe</h1>
+    <h2>Real-Time End-To-End Travel and Wait Timer</h2>
+  </div>
+
+  <div class="content">
+
+    <!-- Directions Input -->
+    <form id="directions-form">
+      <label for="start">Start:</label>
+      <input type="text" id="start" name="start" autocomplete="off">
+
+      <label for="end">End:</label>
+      <input type="text" id="end" name="end" autocomplete="off">
+
+      <input type="submit" value="Get Directions">
+
+      <label for="transport">Method of Transport:</label>
+      <select name="transport" id="transport">
+        <option value="DRIVING">Driving</option>
+        <option value="WALKING">Walking</option>
+        <option value="BICYCLING">Bicycling</option>
+        <option value="TRANSIT">Transit</option>
+      </select><br><br>
+    </form>
+    <div id="map-container">
+      <div id="map"></div>
+      <div id="info-box">
+        Description: <b>{{locationWeather}}</b><br>
+        Temperature: <b>{{locationTemp}} °C</b><br>
+        Wind Speed: <b>{{locationWind}} km/h</b><br>
+        Visibility: <b>{{locationVis}} km</b><br>
+        Travel Time Multiplier: <b>{{weatherWeight}}x</b><br>
+        <!-- Updated Travel Time: <b>{{modifiedDuration}} mins</b><br> -->
+      </div>
+
+      <div id="trip-info"></div>
+
+      <!-- Container for displaying the hotels -->
+      <div id="travel-box">
+        <button class="collapsible">Attractions</button>
+        <div class="attractions-content">
+          {% for attraction in attractions %}
+          {% if attraction.name %}
+          <div class="attraction">
+            <p class="attraction-name" style="font-weight:bold; text-decoration:underline; text-align:center;">{{ attraction.name }}</p>
+            <p class="attraction-address">Address: {{ attraction.address }}</p>
+            <p class="attraction-rating">Rating: {{ attraction.rating }}</p>
+          </div>
+          {% endif %}
+        {% endfor %}
+        </div>
+      
+        <button class="collapsible">Hotels</button>
+        <div class="hotels-content">
+          {% for hotel in hotels %}
+          {% if hotel.name %}
+          <div class="hotel">
+            <p class="hotel-name" style="font-weight:bold; text-decoration:underline; text-align:center;">{{ hotel.name }}</p>
+            <p class="hotel-address">Address: {{ hotel.address }}</p>
+            <p class="hotel-rating">Rating: {{ hotel.rating }}</p>
+            <p class="hotel-price">Price: {{ hotel.price }}</p>
+          </div>
+          {% endif %}
+        {% endfor %}
+        </div>
+      
+        <button class="collapsible">Restaurants</button>
+        <div class="restaurants-content">
+          {% for restaurant in restaurants %}
+          {% if restaurant.name %}
+          <div class="restaurant">
+            <p class="restaurant-name" style="font-weight:bold; text-decoration:underline; text-align:center;">{{ restaurant.name }}</p>
+            <p class="restaurant-address">Address: {{ restaurant.address }}</p>
+            <p class="restaurant-rating">Rating: {{ restaurant.rating }}</p>
+          </div>
+          {% endif %}
+        {% endfor %}
+      </div>
+
+    </div>
+  </div>
+</div>
+
+
+<!-- MAP INITIALIZATION -->
+<script>
+  // Creating button to show weather info
+  function createWeatherControl(map) {
+    const controlButton = document.createElement("button");
+
+    // Set CSS for the control.
+    controlButton.style.backgroundColor = "#008080";
+    controlButton.style.border = "2px solid #008080";
+    controlButton.style.borderRadius = "20px";
+    controlButton.style.boxShadow = "0 2px 6px rgba(0,0,0,.3)";
+    controlButton.style.color = "rgb(25,25,25)";
+    controlButton.style.cursor = "pointer";
+    controlButton.style.fontFamily = "Roboto,Arial,sans-serif";
+    controlButton.style.fontSize = "16px";
+    controlButton.style.lineHeight = "38px";
+    controlButton.style.margin = "8px 0 22px";
+    controlButton.style.padding = "0 5px";
+    controlButton.style.textAlign = "center";
+    controlButton.textContent = "Weather Info";
+    controlButton.title = "Click to recenter the map";
+    controlButton.type = "button";
+
+    // Button opens the infowindow
+    var x = document.getElementById("info-box");
+    x.style.display = "none";
+
+    controlButton.addEventListener("click", () => {
+      var y = document.getElementById("travel-box");
+      var z = document.getElementById("travel-box");
+      if (x.style.display === "none") {
+        x.style.display = "block";
+        y.style.display = "none";
+      } else {
+        x.style.display = "none";
+      }
+    });
+
+    return controlButton;
+  }
+
+  function createTravelAdvisorControl(map) {
+  const controlButton = document.createElement("button");
+
+  // Set CSS for the control.
+  controlButton.style.backgroundColor = "#008080";
+  controlButton.style.border = "2px solid #008080";
+  controlButton.style.borderRadius = "20px";
+  controlButton.style.boxShadow = "0 2px 6px rgba(0,0,0,.3)";
+  controlButton.style.color = "rgb(25,25,25)";
+  controlButton.style.cursor = "pointer";
+  controlButton.style.fontFamily = "Roboto,Arial,sans-serif";
+  controlButton.style.fontSize = "16px";
+  controlButton.style.lineHeight = "38px";
+  controlButton.style.margin = "8px 0 22px";
+  controlButton.style.padding = "0 5px";
+  controlButton.style.textAlign = "center";
+  controlButton.textContent = "Travel Advisor";
+  controlButton.title = "Click to show Travel Advisor options";
+  controlButton.type = "button";
+
+  // Button opens the infowindow
+  var y = document.getElementById("travel-box");
+  y.style.display = "none";
+
+  controlButton.addEventListener("click", () => {
+  var x = document.getElementById("info-box");
+      if (y.style.display === "none") {
+        y.style.display = "block";
+        x.style.display = "none";
+      } else {
+        y.style.display = "none";
+      }
+    });
+
+    return controlButton;
+}
+
+  // Initializing youtube feed set
+  var youtube = JSON.parse('{{ youtube_set_json|escapejs }}');
+
+  let map;
+
+  // INITIALIZING MAP
+  function initMap() {
+    map = new google.maps.Map(document.getElementById('map'), {
+      center: { lat: 43.7626, lng: -79.3832 },
+      zoom: 10
+    });
+
+    // Create traffic layer
+    var trafficLayer = new google.maps.TrafficLayer();
+    trafficLayer.setMap(map);
+
+    // Create a directions service
+    var directionsService = new google.maps.DirectionsService();
+
+    // Create a directions renderer
+    var directionsRenderer = new google.maps.DirectionsRenderer({
+      map: map,
+      suppressMarkers: true,
+      suppressTrafficLayer: false
+    });
+
+    // Add an event listener to the form
+    const form = document.getElementById('directions-form');
+    form.addEventListener('submit', function (event) {
+      event.preventDefault();
+      calculateRoute(map, directionsService, directionsRenderer);
+    });
+
+    const infowindow = new google.maps.InfoWindow();
+
+    // Click on map will add a marker
+    map.addListener('rightclick', function (event) {
+      const marker = new google.maps.Marker({
+        position: event.latLng,
+        map: map
+      });
+
+      // AJAX call to get the closest camera
+      var closest_cam_url;
+      $.ajax({
+        url: 'get_closest_cam',
+        type: 'GET',
+        data: {
+          csrfmiddlewaretoken: "{{ csrf_token }}",
+          'long': event.latLng.lng(),
+          'lat': event.latLng.lat()
+        },
+        success: function (data) {
+          //console.log(data);
+          closest_cam_url = data.url;
+        },
+        error: function (xhr, status, error) {
+          console.log('Error:', error);
+        }
+      });
+
+      // Click of marker opens and closes camera feed
+      marker.addListener('click', function () {
+        const content = document.createElement('div');
+        const image = document.createElement('img');
+        image.src = closest_cam_url;    // Renders image
+        image.width = '380';
+        image.height = '300';
+        content.appendChild(image);
+
+        infowindow.setContent(content);
+        infowindow.open(map, marker);
+
+      });
+    });
+
+    google.maps.event.addListenerOnce(map, 'tilesloaded', function () {
+      initWeatherInfo(map);
+      initTravelInfo(map)
+    });
+  }
+
+  function initWeatherInfo(map) {
+    // Get the map container element
+    var mapElement = document.getElementById('map');
+
+    // Create the DIV to hold the weather control.
+    const centerControlDiv = document.createElement("div");
+    // Create the control.
+    const centerControl = createWeatherControl(map);
+
+    // Append the control to the DIV.
+    centerControlDiv.appendChild(centerControl);
+    map.controls[google.maps.ControlPosition.TOP_CENTER].push(centerControlDiv);
+  }
+
+  function initTravelInfo(map) {
+    // Get the map container element
+    var mapElement = document.getElementById('map');
+
+    // Create the DIV to hold the weather control.
+    const centerControlDiv = document.createElement("div");
+    // Create the control.
+    const centerControl = createTravelAdvisorControl(map);
+
+    // Append the control to the DIV.
+    centerControlDiv.appendChild(centerControl);
+    map.controls[google.maps.ControlPosition.TOP_CENTER].push(centerControlDiv);
+  }
+
+</script>
+
+
+<script src="https://maps.googleapis.com/maps/api/js?key={{ api_key }}&libraries=places&callback=initMap"></script>
+
+<!-- SCRIPT TO DISPLAY/HIDE TRAVELADVISOR INFO -->
+<script>
+  function toggleTravelAdvisorInfo(){
+    const travelAdvisorInfo = document.getElementById("travel-box");
+    if(travelAdvisorInfo.style.display == "none"){
+      travelAdvisorInfo.style.display = "block";
+    } else {
+      travelAdvisorInfo.style.display = "none";
+    }
+  }
+</script>
+
+<!-- SCRIPT CALLING THE TRAVEL ADVISOR API -->
+<script>
+
+  function travelAdvisorFetch(lat, lng){
+    fetchHotels(lat,lng);
+    fetchAttractions(lat, lng);
+    fetchRestaurants(lat, lng);
+  }
+
+  let currentMarker = null;
+
+  // Fetching the Hotels
+  function fetchHotels(lat, lng) {
+      fetch(`/get_hotels?lat=${lat}&lng=${lng}`)
+          .then(response => response.json())
+          .then(data => {
+              if (data.error) {
+                  console.error(data.error);
+              } else {
+                  updateHotelList(data.hotels);
+              }
+          })
+          .catch(error => console.error(error));
+  }
+
+  function updateHotelList(hotels) {
+  const hotelList = document.querySelector(".hotels-content");
+  hotelList.innerHTML = "";
+
+  if (hotels.length === 0) {
+    hotelList.innerHTML = "<p class='no-hotels-message'>No hotels available, please try again later.</p>";
+    return;
+  }
+
+  hotels.forEach(hotel => {
+    if(!hotel.name){
+      return;
+    }
+    const hotelElement = document.createElement("div");
+    hotelElement.classList.add("hotel");
+
+    hotelElement.onmouseover = function() {
+      console.log('Mouse entered the restaurant element');
+      if (currentMarker) {
+        currentMarker.setMap(null);
+      }
+      currentMarker = showMarkerOnMap(hotel.name, hotel.latitude, hotel.longitude);
+    };
+  
+    hotelElement.onmouseout = function() {
+      console.log('Mouse left the hotel element');
+      if (currentMarker) {
+        currentMarker.setMap(null);
+      }
+    };
+
+    hotelElement.innerHTML = `
+    <span style="display: block; margin-bottom: 5px; text-align: center; font-weight: bold; text-decoration: underline;">${hotel.name}</span>
+      <span style="display: block; margin-bottom: 5px;"> Address: ${hotel.address || 'NA'}</span>
+      <span style="display: block; margin-bottom: 5px;">Rating: ${hotel.rating || 'NA'}</span>
+      <span style="display: block; margin-bottom: 5px;">Rating: ${hotel.price || 'NA'}</span>
+      <a style="display: block; margin-bottom: 5px; text-align: center; color: blue;" href="${hotel.url}" target="_blank">More Info</a>
+    `;
+
+    hotelList.appendChild(hotelElement);
+  });
+}
+
+  // Fetching the Attractions
+
+let isFetchAttraction = false;
+  
+function fetchAttractions(lat, lng) {
+  fetch(`/get_attractions?lat=${lat}&lng=${lng}`)
+    .then(response => response.json())
+    .then(data => {
+      if (data.error) {
+        console.error(data.error);
+      } else {
+        updateAttractionList(data.attractions);
+      }
+    })
+    .catch(error => console.error(error));
+}
+
+function updateAttractionList(attractions) {
+  const attractionList = document.querySelector(".attractions-content");
+  attractionList.innerHTML = "";
+
+  if (attractions.length === 0) {
+    attractionList.innerHTML = "<p class='no-attractions-message'>No attractions available, please try again later.</p>";
+    return;
+  }
+
+  attractions.forEach(attraction => {
+    if(!attraction.name){
+      return;
+    }
+    const attractionElement = document.createElement("div");
+    attractionElement.classList.add("attraction");
+
+    attractionElement.onmouseover = function() {
+      console.log('Mouse entered the restaurant element');
+      if (currentMarker) {
+        currentMarker.setMap(null);
+      }
+      currentMarker = showMarkerOnMap(attraction.name, attraction.latitude, attraction.longitude);
+    };
+  
+    attractionElement.onmouseout = function() {
+      console.log('Mouse left the attraction element');
+      if (currentMarker) {
+        currentMarker.setMap(null);
+      }
+    };
+
+
+    attractionElement.innerHTML = `
+      <span style="display: block; margin-bottom: 5px; text-align: center; font-weight: bold; text-decoration: underline;">${attraction.name}</span>
+      <span style="display: block; margin-bottom: 5px;"> Address: ${attraction.address || 'NA'}</span>
+      <span style="display: block; margin-bottom: 5px;">Rating: ${attraction.rating || 'NA'}</span>
+      <a style="display: block; margin-bottom: 5px; text-align: center; color: blue;" href="${attraction.web_url}" target="_blank">More Info</a>
+
+    `;
+
+    attractionList.appendChild(attractionElement);
+  });
+}
+
+// Fetch the Restaurants
+function fetchRestaurants(lat, lng) {
+  fetch(`/get_restaurants?lat=${lat}&lng=${lng}`)
+    .then(response => response.json())
+    .then(data => {
+      if (data.error) {
+        console.error(data.error);
+      } else {
+        updateRestaurantList(data.restaurants);
+      }
+    })
+    .catch(error => console.error(error));
+}
+
+function updateRestaurantList(restaurants) {
+  const restaurantList = document.querySelector(".restaurants-content");
+  restaurantList.innerHTML = "";
+
+  if (restaurants.length === 0) {
+    restaurantList.innerHTML = "<p class='no-restaurants-message'>No restaurants available, please try again later.</p>";
+    return;
+  }
+
+
+  restaurants.forEach(restaurant => {
+    if(!restaurant.name){
+      return;
+    }
+    const restaurantElement = document.createElement("div");
+    restaurantElement.classList.add("restaurant");
+
+    restaurantElement.onmouseover = function() {
+      console.log('Mouse entered the restaurant element');
+      if (currentMarker) {
+        currentMarker.setMap(null);
+      }
+      currentMarker = showMarkerOnMap(restaurant.name, restaurant.latitude, restaurant.longitude);
+    };
+  
+    restaurantElement.onmouseout = function() {
+      console.log('Mouse left the restaurant element');
+      if (currentMarker) {
+        currentMarker.setMap(null);
+      }
+    };
+
+    restaurantElement.innerHTML = `
+    <div class="restaurant">
+      <span style="display: block; margin-bottom: 5px; text-align: center; font-weight: bold; text-decoration: underline;">${restaurant.name}</span>
+      <span style="display: block; margin-bottom: 5px;"> Address: ${restaurant.address || 'NA'}</span>
+      <span style="display: block; margin-bottom: 5px;">Rating: ${restaurant.rating || 'NA'}</span>
+      <span style="display: block; margin-bottom: 5px;">Price: ${restaurant.price || 'NA'}</span>
+      <a style="display: block; margin-bottom: 5px; text-align: center; color: blue;" href="${restaurant.web_url}" target="_blank">More Info</a>
+    </div>
+    `;
+
+    restaurantList.appendChild(restaurantElement);
+  });
+}
+
+</script>
+
+
+<!-- ROUTE SETTING -->
+<script>
+  // Input areas
+  var startInput = document.getElementById('start');
+  var endInput = document.getElementById('end');
+
+  // Autocomplete script with google maps api
+  var startAutocomplete = new google.maps.places.Autocomplete(startInput);
+  var endAutocomplete = new google.maps.places.Autocomplete(endInput);
+
+  // Function autocomplete
+  function onPlaceSelect(input, autocomplete) {
+    google.maps.event.addListener(autocomplete, 'place_changed', function () {
+      var place = autocomplete.getPlace();
+      if (place.geometry) {
+        input.value = place.formatted_address;
+      }
+    });
+  }
+  onPlaceSelect(startInput, startAutocomplete);
+  onPlaceSelect(endInput, endAutocomplete);
+
+
+  function calculateRoute(map, directionsService, directionsRenderer) {
+    // Get the start and end locations from the formen
+    var start = document.getElementById('start').value;
+    var end = document.getElementById('end').value;
+    var transportMethod = document.getElementById('transport').value;
+
+    // Define the route request
+    var request = {
+      origin: start,
+      destination: end,
+      durationInTraffic: true,
+      travelMode: transportMethod,
+      drivingOptions: {
+        departureTime: new Date(),
+        trafficModel: 'bestguess'
+      }
+    };
+
+    // Call the directions service to calculate the route
+    directionsService.route(request, function (result, status) {
+      if (status == 'OK') {
+        // Display the route on the map
+        directionsRenderer.setDirections(result);
+        const route = result.routes[0];
+        const endAddress = result.routes[0].legs[0].end_address;
+        const distance = route.legs[0].distance.text;
+        const duration = route.legs[0].duration.text;
+        const duration_in_traffic = route.legs[0].duration_in_traffic.text;
+
+        // Set end marker
+        const endMarker = new google.maps.Marker({
+          position: route.legs[0].end_location,
+          map: map,
+          title: 'End',
+          icon: 'https://developers.google.com/maps/documentation/javascript/examples/full/images/beachflag.png'
+        });
+
+        // Add info window to end marker, containing distance, duration and traffic info
+        var tripInfoDiv = document.getElementById("trip-info");
+        tripInfoDiv.innerHTML = '<strong>' + endAddress + '</strong><br>' + distance + '<br>' +
+          duration_in_traffic + '<br>';
+
+        // Display the trip info box after query
+        tripInfoDiv.style.display = "block";
+
+        // CODE FOR TRAVEL ADVISOR 
+        fetchHotels(route.legs[0].end_location.lat(), route.legs[0].end_location.lng());
+        fetchAttractions(route.legs[0].end_location.lat(), route.legs[0].end_location.lng());
+        fetchRestaurants(route.legs[0].end_location.lat(), route.legs[0].end_location.lng());
+        
+        // CODE TO DETECT AND DISPLAY YOUTUBE FEED IF APPLICATION
+
+        // Check if any of the YouTube markers are near the destination
+        for (var i = 0; i < youtube.length; i++){
+          const point = youtube[i]
+          const youtubeMarker = new google.maps.Marker({
+            position: { lat: point.latitude, lng: point.longitude },
+            map: null, // initially hide the marker
+            title: point.title,
+            zIndex: 100,
+          });
+
+          const service = new google.maps.DistanceMatrixService();
+          service.getDistanceMatrix(
+            {
+              origins: [youtubeMarker.getPosition()],
+              destinations: [end],
+              travelMode: 'DRIVING',
+            },
+            (response, status) => {
+              if(status != 'OK'){
+                console.log('Error:', status);
+              } else{
+                const duration = response.rows[0].elements[0].duration.value;
+                if (duration <= 900) { // if the duration is less than or equal to 15 minutes
+                  // Display the YouTube marker
+                  youtubeMarker.setMap(map);
+                  endMarker.setMap(null);
+
+                  // Add a click listener to the YouTube marker
+                  youtubeMarker.addListener('click', () => {
+                    // Get the video ID from the URL
+                    const videoId = point.video.split('v=')[1];
+                    const embedUrl = `https://www.youtube.com/embed/${videoId}`;
+                    const content = document.createElement('div');
+                    const iframe = document.createElement('iframe');
+
+                    iframe.setAttribute('allowfullscreen', '');
+                    iframe.setAttribute('frameborder', '0');
+                    iframe.setAttribute('allow', 'encrypted-media; picture-in-picture');
+                    iframe.setAttribute('src', embedUrl);
+                    iframe.style.width = '100%';
+                    iframe.style.height = '360px';
+                    content.appendChild(iframe);
+
+                    // Display the info window
+                    const infowindow = new google.maps.InfoWindow()
+                    infowindow.setContent(content);
+                    infowindow.open(map, youtubeMarker);
+                  });
+                }
+              }
+            }
+          )
+        }
+      }
+    });
+  }
+
+</script>
+
+<script>
+  const coll = document.getElementsByClassName("collapsible");
+  for (let i = 0; i < coll.length; i++) {
+    coll[i].addEventListener("click", function() {
+      this.classList.toggle("active");
+      let content = this.nextElementSibling;
+      if (content.style.maxHeight) {
+        content.style.maxHeight = null;
+      } else {
+        content.style.maxHeight = content.scrollHeight + "px";
+      } 
+    });
+  }
+
+</script>
+
+<script>
+  const travelBox = document.getElementById("travel-box");
+  const contentElements = document.getElementsByClassName("collapsible-content");
+  const collapsibleButtons = document.getElementsByClassName("collapsible");
+  const googleMap = document.getElementById("map");
+
+  for (let i = 0; i < collapsibleButtons.length; i++) {
+  collapsibleButtons[i].addEventListener("click", function() {
+    if (this.classList.contains("active")) {
+      // If the button is expanded, set the height of the travel box to the maximum of 80% of the map height and the height of the content
+      const contentHeight = contentElements[i].offsetHeight;
+      const mapHeight = googleMap.offsetHeight;
+      travelBox.style.height = Math.min(0.8 * mapHeight, contentHeight) + "px";
+    } else {
+      // If the button is collapsed, set the height of the travel box to 20%
+      travelBox.style.height = "20%";
+    }
+  });
+}
+
+</script>
+
+<script>
+
+function showMarkerOnMap(name, lat, lng) {
+  if (currentMarker) {
+    currentMarker.setMap(null);
+  }
+
+  lat = parseFloat(lat);
+  lng = parseFloat(lng);
+
+  currentMarker = new google.maps.Marker({
+    position: {lat: lat, lng: lng},
+    map: map,
+    title: name
+  });
+
+  currentMarker = marker;
+  return marker;
+}
+
+</script>
+
+<script src="{% static 'js/ui.js' %}"></script>
+<script src="https://ajax.googleapis.com/ajax/libs/jquery/3.6.0/jquery.min.js"></script>
+{% endblock %}

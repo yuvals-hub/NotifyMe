@@ -1,0 +1,38 @@
+{% extends "main/base.html" %}
+{% load static %}
+{% block content %}
+
+<div id="main">
+    <div class="header">
+        <h1>Airport Data</h1>
+        <h2>Airport terminal travel/wait times, including information on delays</h2>
+    </div>
+
+    <div class="content">
+        <h2 class="content-subhead">Nearest Airport Finder</h2>
+        <p>Find airport closest to reference point, within specified radius.</p>
+        <form method="POST" action="results2">
+            {% csrf_token %}
+            <label>Reference</label>
+            <input type="text" name="reference" id="reference" class="form-control" placeholder="e.g. Union Station"
+                required><br><br>
+            <label>Radius (meters)</label>
+            <input type="text" name="radius" id="radius" class="form-control" placeholder="e.g. 1000" required><br><br>
+            <button type="submit" , name="save">Find Nearest Airport</button>
+        </form>
+    </div>
+</div>
+
+<script type="text/javascript"
+    src="https://maps.google.com/maps/api/js?key={{ google_maps_api_key }}&libraries=places"></script>
+
+<script>
+    function initialize() {
+        var input = document.getElementById('reference');
+        new google.maps.places.Autocomplete(input);
+    }
+    google.maps.event.addDomListener(window, 'load', initialize);
+</script>
+
+<script src="{% static 'js/ui.js' %}"></script>
+{% endblock %}
